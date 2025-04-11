@@ -1,45 +1,76 @@
-from dolfin import *
+import fenics as fe
+import matplotlib.pyplot as plt
 from physics import define_weak_formulation, compute_magnetic_force
-from solver import solve_weak_formulation
+from geometry import create_mesh_and_subdomains
+import numpy as np
+from plot import plot_magnetic_force
 
-# Define the computational domain and mesh
-length = 1.0  # Length of the domain (meters)
-width = 1.0   # Width of the domain (meters)
-mesh = RectangleMesh(Point(0, 0), Point(length, width), 50, 50)
+# Define constants
+LENGTH = 1.0  # Length of the domain (meters)
+WIDTH = 1.0   # Width of the domain (meters)
+HEIGHT = 1.0  # Height of the domain (meters)
+MU_ELECTROMAGNET = 4 * fe.pi * 1e-7  # Electromagnet permeability (H/m)
+MU_AIR = 1.0  # Air permeability
+CURRENT_MAGNITUDE = 1e6  # Current density magnitude (A/m^2)
+EFFECTIVE_CONDUCTIVITY = 0.283  # 28.3% effective surface
+METAL_SHEET_THICKNESS = 0.0007
+METAL_SHEET_POSITIONS = [0.5 - 0.00035 - i * 0.0002 for i in range(4)]  # Centered in z-direction
+NUM_ELECTROMAGNETS = 6
+ELECTROMAGNET_RADIUS = 0.01  # 20 mm diameter
+ELECTROMAGNET_HEIGHT = 0.015  # 15 mm length
 
-# Define physical parameters
-mu = Constant(4 * pi * 1e-7)  # Magnetic permeability (H/m)
-current_magnitude = 1e6       # Current density magnitude (A/m^2)
-magnet_spacing = 0.1          # Spacing between magnets (meters)
+# Solver function from solver.py
+def solve_weak_formulation(V, weak_form, bc):
+    """
+    Solve the weak formulation for the magnetic vector potential A.
 
-# Define the current density J (alternating polarity array)
-class CurrentDensity(UserExpression):
-    def eval(self, values, x):
-        magnet_index = int(x[0] // magnet_spacing)
-        if magnet_index % 2 == 0:
-            values[0] = 0.0  # Jx
-            values[1] = 0.0  # Jy
-            values[2] = current_magnitude  # Jz
-        else:
-            values[0] = 0.0
-            values[1] = 0.0
-            values[2] = -current_magnitude
-    def value_shape(self):
-        return (3,)
+    Parameters:
+        V (FunctionSpace): Function space for the magnetic vector potential.
+        weak_form (Form): Weak formulation of the problem.
+        bc (DirichletBC): Boundary condition.
 
-J = CurrentDensity(degree=1)
+    Returns:
+        Function: Solved magnetic vector potential A.
+    """
+    # Define the solution function
+    A = fe.Function(V)
+
+    # Solve the weak formulation
+    fe.solve(fe.lhs(weak_form) == fe.rhs(weak_form), A, bc)
+
+    return A
+
+# Create mesh and subdomains
+mesh, mu, J, bc = create_mesh_and_subdomains(
+    LENGTH, WIDTH, HEIGHT, MU_ELECTROMAGNET, MU_AIR, CURRENT_MAGNITUDE,
+    EFFECTIVE_CONDUCTIVITY, METAL_SHEET_THICKNESS, METAL_SHEET_POSITIONS,
+    NUM_ELECTROMAGNETS, ELECTROMAGNET_RADIUS, ELECTROMAGNET_HEIGHT
+)
 
 # Define the weak formulation
-V, weak_form, v, A = define_weak_formulation(mesh, mu, J)
+V, weak_form, v, A = define_weak_formulation(mesh, mu, J, EFFECTIVE_CONDUCTIVITY, METAL_SHEET_POSITIONS, METAL_SHEET_THICKNESS)
 
 # Solve the weak formulation
-A_solution = solve_weak_formulation(V, weak_form)
+A_solution = solve_weak_formulation(V, weak_form, bc)
 
 # Compute the magnetic force in the z-direction
 f_z = compute_magnetic_force(mesh, A_solution, mu)
 
 # Save the results for visualization
-File("magnetic_vector_potential.pvd") << A_solution
-File("magnetic_force_z.pvd") << f_z
+fe.File("magnetic_vector_potential.pvd") << A_solution
+fe.File("magnetic_force_z.pvd") << f_z
+
+# Visualize the results
+plt.figure()
+plot = fe.plot(A_solution)
+plt.colorbar(plot)
+plt.title("Magnetic Vector Potential")
+plt.show()
+
+# Define z-positions for plotting
+z_plot_positions = [0.45, 0.5, 0.55]  # Example z-positions near the center
+
+# Plot the magnetic force
+plot_magnetic_force(f_z, mesh, ELECTROMAGNET_RADIUS, ELECTROMAGNET_HEIGHT, METAL_SHEET_POSITIONS, z_plot_positions)
 
 print("Simulation complete. Results saved to files.")
