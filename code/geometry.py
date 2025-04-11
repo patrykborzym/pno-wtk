@@ -13,7 +13,7 @@ def create_mesh_and_subdomains(length, width, height, mu_electromagnet, mu_air, 
         height (float): Height of the domain.
         mu_electromagnet (float): Magnetic permeability of electromagnets.
         mu_air (float): Magnetic permeability of air.
-        current_magnitude (float): Current density magnitude.
+        current_magnitude (float): Current density magnitude (calculated).
         effective_conductivity (float): Effective conductivity of metal sheets.
         metal_sheet_thickness (float): Thickness of metal sheets.
         metal_sheet_positions (list): Z-positions of metal sheets.
@@ -87,6 +87,8 @@ def create_mesh_and_subdomains(length, width, height, mu_electromagnet, mu_air, 
     def boundary(x, on_boundary):
         return on_boundary
 
-    bc = fe.DirichletBC(fe.FunctionSpace(mesh, "Nedelec 1st kind H(curl)", 1), fe.Constant((0.0, 0.0, 0.0)), boundary)
+    # Create a function space for boundary conditions
+    V = fe.FunctionSpace(mesh, "Nedelec 1st kind H(curl)", 1)
+    bc = fe.DirichletBC(V, fe.Constant((0.0, 0.0, 0.0)), boundary)
 
     return mesh, mu, J, bc

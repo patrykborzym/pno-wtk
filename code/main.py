@@ -11,13 +11,17 @@ WIDTH = 1.0   # Width of the domain (meters)
 HEIGHT = 1.0  # Height of the domain (meters)
 MU_ELECTROMAGNET = 4 * fe.pi * 1e-7  # Electromagnet permeability (H/m)
 MU_AIR = 1.0  # Air permeability
-CURRENT_MAGNITUDE = 1e6  # Current density magnitude (A/m^2)
 EFFECTIVE_CONDUCTIVITY = 0.283  # 28.3% effective surface
 METAL_SHEET_THICKNESS = 0.0007
 METAL_SHEET_POSITIONS = [0.5 - 0.00035 - i * 0.0002 for i in range(4)]  # Centered in z-direction
 NUM_ELECTROMAGNETS = 6
 ELECTROMAGNET_RADIUS = 0.01  # 20 mm diameter
 ELECTROMAGNET_HEIGHT = 0.015  # 15 mm length
+
+# Calculate current magnitude based on parameters
+ELECTROMAGNET_AREA = fe.pi * ELECTROMAGNET_RADIUS**2  # Cross-sectional area of an electromagnet
+DESIRED_MAGNETIC_FIELD = 1.0  # Desired magnetic field strength (T)
+CURRENT_MAGNITUDE = DESIRED_MAGNETIC_FIELD / (MU_ELECTROMAGNET * ELECTROMAGNET_AREA)
 
 # Solver function from solver.py
 def solve_weak_formulation(V, weak_form, bc):

@@ -33,10 +33,14 @@ def define_weak_formulation(mesh, mu, J, effective_conductivity, sheet_positions
     weak_form = (1 / mu) * fe.inner(fe.curl(A), fe.curl(v)) * fe.dx - fe.inner(J, v) * fe.dx
 
     # Add metal sheets as regions with reduced conductivity
-    for z in sheet_positions:
+    subdomains = fe.MeshFunction("size_t", mesh, 3, 0)
+    for i, z in enumerate(sheet_positions):
         sheet_region = fe.CompiledSubDomain("near(x[2], z, tol)", z=z, tol=sheet_thickness / 2)
-        dx_sheet = fe.Measure("dx", domain=mesh, subdomain_data=sheet_region)
-        weak_form += effective_conductivity * fe.inner(fe.curl(A), fe.curl(v)) * dx_sheet
+        sheet_region.mark(subdomains, i + 1)
+
+    dx = fe.Measure("dx", domain=mesh, subdomain_data=subdomains)
+    for i, z in enumerate(sheet_positions):
+        weak_form += effective_conductivity * fe.inner(fe.curl(A), fe.curl(v)) * dx(i + 1)
 
     return V, weak_form, v, A
 
