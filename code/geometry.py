@@ -5,24 +5,10 @@ def create_mesh_and_subdomains(length, width, height, mu_electromagnet, mu_air, 
                                 num_electromagnets, electromagnet_radius, electromagnet_height):
     """
     Create the computational mesh, define subdomains for electromagnets and air,
-    and set up physical parameters and boundary conditions.
-
-    Parameters:
-        length (float): Length of the domain.
-        width (float): Width of the domain.
-        height (float): Height of the domain.
-        mu_electromagnet (float): Magnetic permeability of electromagnets.
-        mu_air (float): Magnetic permeability of air.
-        current_magnitude (float): Current density magnitude (calculated).
-        effective_conductivity (float): Effective conductivity of metal sheets.
-        metal_sheet_thickness (float): Thickness of metal sheets.
-        metal_sheet_positions (list): Z-positions of metal sheets.
-        num_electromagnets (int): Number of electromagnets in one row/column.
-        electromagnet_radius (float): Radius of each electromagnet.
-        electromagnet_height (float): Height of each electromagnet.
+    and set up physical parameters.
 
     Returns:
-        tuple: (mesh, mu, J, bc)
+        tuple: (mesh, mu, J, V)
     """
     # Define the computational domain and mesh
     mesh = fe.BoxMesh(fe.Point(0, 0, 0), fe.Point(length, width, height), 20, 20, 20)
@@ -83,12 +69,7 @@ def create_mesh_and_subdomains(length, width, height, mu_electromagnet, mu_air, 
 
     J = CurrentDensity(degree=1)
 
-    # Apply homogeneous Dirichlet boundary conditions
-    def boundary(x, on_boundary):
-        return on_boundary
-
-    # Create a function space for boundary conditions
+    # Create a function space for the weak formulation
     V = fe.FunctionSpace(mesh, "Nedelec 1st kind H(curl)", 1)
-    bc = fe.DirichletBC(V, fe.Constant((0.0, 0.0, 0.0)), boundary)
 
-    return mesh, mu, J, bc
+    return mesh, mu, J, V

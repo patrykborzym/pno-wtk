@@ -45,7 +45,7 @@ def solve_weak_formulation(V, weak_form, bc):
     return A
 
 # Create mesh and subdomains
-mesh, mu, J, bc = create_mesh_and_subdomains(
+mesh, mu, J, V = create_mesh_and_subdomains(
     LENGTH, WIDTH, HEIGHT, MU_ELECTROMAGNET, MU_AIR, CURRENT_MAGNITUDE,
     EFFECTIVE_CONDUCTIVITY, METAL_SHEET_THICKNESS, METAL_SHEET_POSITIONS,
     NUM_ELECTROMAGNETS, ELECTROMAGNET_RADIUS, ELECTROMAGNET_HEIGHT
@@ -55,7 +55,7 @@ mesh, mu, J, bc = create_mesh_and_subdomains(
 V, weak_form, v, A = define_weak_formulation(mesh, mu, J, EFFECTIVE_CONDUCTIVITY, METAL_SHEET_POSITIONS, METAL_SHEET_THICKNESS)
 
 # Solve the weak formulation
-A_solution = solve_weak_formulation(V, weak_form, bc)
+A_solution = solve_weak_formulation(V, weak_form, None)
 
 # Compute the magnetic force in the z-direction
 f_z = compute_magnetic_force(mesh, A_solution, mu)
@@ -64,15 +64,8 @@ f_z = compute_magnetic_force(mesh, A_solution, mu)
 fe.File("magnetic_vector_potential.pvd") << A_solution
 fe.File("magnetic_force_z.pvd") << f_z
 
-# Visualize the results
-plt.figure()
-plot = fe.plot(A_solution)
-plt.colorbar(plot)
-plt.title("Magnetic Vector Potential")
-plt.show()
-
 # Define z-positions for plotting
-z_plot_positions = [0.45, 0.5, 0.55]  # Example z-positions near the center
+z_plot_positions = [0.1, 0.2, 0.3, 0.4, 0.41, 0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.5]  # Example z-positions near the center
 
 # Plot the magnetic force
 plot_magnetic_force(f_z, mesh, ELECTROMAGNET_RADIUS, ELECTROMAGNET_HEIGHT, METAL_SHEET_POSITIONS, z_plot_positions)

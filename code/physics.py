@@ -2,7 +2,7 @@ import fenics as fe
 
 def define_weak_formulation(mesh, mu, J, effective_conductivity, sheet_positions, sheet_thickness):
     """
-    Define the weak formulation for the magnetic vector potential A, including subdomains.
+    Define the weak formulation for the magnetic vector potential A, including subdomains and boundary conditions.
 
     Parameters:
         mesh (Mesh): The computational mesh.
@@ -29,6 +29,10 @@ def define_weak_formulation(mesh, mu, J, effective_conductivity, sheet_positions
     if J.ufl_shape != v.ufl_shape:
         raise ValueError(f"Shape mismatch: J has shape {J.ufl_shape}, but v has shape {v.ufl_shape}")
 
+    # Ensure A is a vector field
+    if A.ufl_shape != (3,):
+        raise ValueError("Magnetic vector potential A must be a vector field.")
+
     # Weak formulation for the magnetic vector potential
     weak_form = (1 / mu) * fe.inner(fe.curl(A), fe.curl(v)) * fe.dx - fe.inner(J, v) * fe.dx
 
@@ -41,6 +45,12 @@ def define_weak_formulation(mesh, mu, J, effective_conductivity, sheet_positions
     dx = fe.Measure("dx", domain=mesh, subdomain_data=subdomains)
     for i, z in enumerate(sheet_positions):
         weak_form += effective_conductivity * fe.inner(fe.curl(A), fe.curl(v)) * dx(i + 1)
+
+    # Apply boundary conditions using a penalty method
+    penalty = 1e10  # Large penalty parameter
+    boundary = fe.CompiledSubDomain("on_boundary")
+    ds = fe.Measure("ds", domain=mesh, subdomain_data=subdomains)
+    weak_form += penalty * fe.inner(A, v) * ds
 
     return V, weak_form, v, A
 
@@ -59,6 +69,10 @@ def compute_magnetic_force(mesh, A, mu):
     """
     # Magnetic field B = curl(A)
     B = fe.curl(A)
+
+    # Ensure B is a valid vector field
+    if B.ufl_shape != (3,):
+        raise ValueError("Magnetic field B must be a vector field derived from the curl of A.")
 
     # Components of the Maxwell stress tensor
     Bx, By, Bz = B[0], B[1], B[2]

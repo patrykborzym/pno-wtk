@@ -1,3 +1,4 @@
+import fenics as fe
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -15,12 +16,17 @@ def plot_magnetic_force(f_z, mesh, electromagnet_radius, electromagnet_height, m
     """
     LENGTH = mesh.coordinates()[:, 0].max()
     WIDTH = mesh.coordinates()[:, 1].max()
-    NUM_ELECTROMAGNETS = int(np.sqrt(len(mesh.coordinates())))
+    NUM_ELECTROMAGNETS = int(np.sqrt(36))  # 6x6 grid of electromagnets
 
     # Create a mesh grid for plotting
     x = np.linspace(0, LENGTH, 100)
     y = np.linspace(0, WIDTH, 100)
     X, Y = np.meshgrid(x, y)
+
+    # Define the z-range for the electromagnets
+    z_center = 0.5  # Center of the domain in the z-direction
+    z_min = z_center - electromagnet_height / 2
+    z_max = z_center + electromagnet_height / 2
 
     for z in z_values:
         # Evaluate the magnetic force at the given z-plane
@@ -37,13 +43,14 @@ def plot_magnetic_force(f_z, mesh, electromagnet_radius, electromagnet_height, m
         plt.xlabel("x (m)")
         plt.ylabel("y (m)")
 
-        # Overlay electromagnets
-        for i in range(NUM_ELECTROMAGNETS):
-            for j in range(NUM_ELECTROMAGNETS):
-                center_x = (i - (NUM_ELECTROMAGNETS - 1) / 2) * electromagnet_radius * 2 + LENGTH / 2
-                center_y = (j - (NUM_ELECTROMAGNETS - 1) / 2) * electromagnet_radius * 2 + WIDTH / 2
-                circle = plt.Circle((center_x, center_y), electromagnet_radius, color="red", fill=False, label="Electromagnet")
-                plt.gca().add_artist(circle)
+        # Overlay electromagnets only if the z-plane intersects their height
+        if z_min <= z <= z_max:
+            for i in range(NUM_ELECTROMAGNETS):
+                for j in range(NUM_ELECTROMAGNETS):
+                    center_x = (i - (NUM_ELECTROMAGNETS - 1) / 2) * electromagnet_radius * 2 + LENGTH / 2
+                    center_y = (j - (NUM_ELECTROMAGNETS - 1) / 2) * electromagnet_radius * 2 + WIDTH / 2
+                    circle = plt.Circle((center_x, center_y), electromagnet_radius, color="red", fill=False, label="Electromagnet")
+                    plt.gca().add_artist(circle)
 
         # Overlay metal sheets
         for sheet_z in metal_sheet_positions:
