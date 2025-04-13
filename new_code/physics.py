@@ -1,5 +1,6 @@
 import fenics as fe
 import numpy as np
+from geometry import create_mesh_and_subdomains
 
 def generate_current_density(mesh, length_of_domain, width_of_domain,
                              num_electromagnets_length, num_electromagnets_width,
@@ -36,6 +37,7 @@ def generate_current_density(mesh, length_of_domain, width_of_domain,
 
     return J
 
+
 def define_weak_form(mesh, mu, J):
     """
     Define the weak formulation for the magnetic vector potential A.
@@ -53,15 +55,28 @@ def define_weak_form(mesh, mu, J):
 
     return nedelec_first_kind, weak_form_lhs, weak_form_rhs
 
-def compute_magnetic_force(mesh, b_solution, mu):
+def compute_magnetic_force(mesh, b_solution, domain, mu_air, mu_electromagnet, mu_metal_sheet):
+    """
+    Compute the magnetic force in the z-direction, considering different mu values for each material.
+    """
     # Magnetic field B = curl(A)
     B = fe.curl(b_solution)
 
+    # Define a piecewise function for mu based on the domain
+    mu_values = fe.Function(fe.FunctionSpace(mesh, "DG", 0))
+    mu_array = mu_values.vector().get_local()
+    domain_array = domain.array()
+    mu_array[domain_array == 0] = mu_air
+    mu_array[domain_array == 1] = mu_electromagnet
+    mu_array[domain_array == 2] = mu_metal_sheet
+    mu_values.vector().set_local(mu_array)
+    mu_values.vector().apply("insert")
+
     # Components of the Maxwell stress tensor
     Bx, By, Bz = B[0], B[1], B[2]
-    T_xz = (1 / mu) * Bx * Bz
-    T_yz = (1 / mu) * By * Bz
-    T_zz = (1 / mu) * Bz**2 - (1 / (2 * mu)) * (Bx**2 + By**2 + Bz**2)
+    T_xz = (1 / mu_values) * Bx * Bz
+    T_yz = (1 / mu_values) * By * Bz
+    T_zz = (1 / mu_values) * Bz**2 - (1 / (2 * mu_values)) * (Bx**2 + By**2 + Bz**2)
 
     # Magnetic force in the z-direction
     f_z = fe.div(fe.as_vector([T_xz, T_yz, T_zz]))
@@ -71,3 +86,56 @@ def compute_magnetic_force(mesh, b_solution, mu):
     f_z_projected = fe.project(f_z, V)
 
     return f_z_projected
+
+def calculate_solution(resolution, length_of_domain, width_of_domain, height_of_domain, mu_air,
+                       num_electromagnets_length, num_electromagnets_width, electromagnet_radius,
+                       electromagnet_height, mu_electromagnet, num_metal_sheets, metal_sheet_length,
+                       metal_sheet_width, metal_sheet_thickness, mu_metal_sheet, distance_between_metal_sheets,
+                       current_magnitude):
+
+    # Create mesh and subdomains
+    mesh, mu, domain = create_mesh_and_subdomains(
+        length_of_domain, width_of_domain, height_of_domain, mu_air,
+        num_electromagnets_length, num_electromagnets_width, electromagnet_radius,
+        electromagnet_height, mu_electromagnet, num_metal_sheets, metal_sheet_length,
+        metal_sheet_width, metal_sheet_thickness, mu_metal_sheet, distance_between_metal_sheets,
+        resolution=resolution
+    )
+
+    # Generate current density
+    J = generate_current_density(
+        mesh, length_of_domain, width_of_domain,
+        num_electromagnets_length, num_electromagnets_width,
+        electromagnet_radius, current_magnitude
+    )
+
+    # Define the weak formulation
+    nedelec_first_kind, weak_form_lhs, weak_form_rhs = define_weak_form(mesh, mu, J)
+
+    # Define the homogeneous Dirichlet boundary condition
+    def boundary_boolean_function(x, on_boundary):
+        return on_boundary and (
+            fe.near(x[0], 0) or fe.near(x[0], length_of_domain) or
+            fe.near(x[1], 0) or fe.near(x[1], width_of_domain) or
+            fe.near(x[2], 0) or fe.near(x[2], height_of_domain)
+        )
+
+    homogeneous_dirichlet_boundary_condition = fe.DirichletBC(
+        nedelec_first_kind,
+        fe.Constant((0.0, 0.0, 0.0)),  # Zero vector for homogeneous Dirichlet condition
+        boundary_boolean_function,
+    )
+
+    # Solve the system using a robust direct solver (MUMPS)
+    b_solution = fe.Function(nedelec_first_kind)
+    problem = fe.LinearVariationalProblem(
+        weak_form_lhs, weak_form_rhs, b_solution, homogeneous_dirichlet_boundary_condition
+    )
+    solver = fe.LinearVariationalSolver(problem)
+
+    # Configure the solver to use MUMPS
+    solver.parameters["linear_solver"] = "mumps"
+    solver.parameters["preconditioner"] = "none"  # No preconditioner needed for direct solvers
+    solver.solve()
+
+    return mesh, nedelec_first_kind, b_solution, mu, domain
