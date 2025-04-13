@@ -1,41 +1,40 @@
 import fenics as fe
+import numpy as np
 
-class CurrentDensity(fe.UserExpression):
-    def __init__(self, length_of_domain, width_of_domain, num_electromagnets_length,
-                 num_electromagnets_width, electromagnet_radius, current_magnitude, **kwargs):
-        super().__init__(**kwargs)
-        self.centers = []
-        self.radius = electromagnet_radius
-        self.current_magnitude = current_magnitude
-        self.num_electromagnets_length = num_electromagnets_length
-        self.num_electromagnets_width = num_electromagnets_width
+def generate_current_density(mesh, length_of_domain, width_of_domain,
+                             num_electromagnets_length, num_electromagnets_width,
+                             electromagnet_radius, current_magnitude):
+    # Scalar space (used to create component functions)
+    V_scalar = fe.FunctionSpace(mesh, 'CG', 1)
+    coords = V_scalar.tabulate_dof_coordinates().reshape((-1, 3))
 
-        # Calculate electromagnet positions and store with their grid indices
-        for i in range(num_electromagnets_length):
-            for j in range(num_electromagnets_width):
-                center_x = (i - (num_electromagnets_length - 1) / 2) * electromagnet_radius * 2 + length_of_domain / 2
-                center_y = (j - (num_electromagnets_width - 1) / 2) * electromagnet_radius * 2 + width_of_domain / 2
-                self.centers.append((center_x, center_y, i, j))
+    # Compute all magnet centers
+    centers = np.array([
+        [
+            (i - (num_electromagnets_length - 1) / 2) * electromagnet_radius * 2 + length_of_domain / 2,
+            (j - (num_electromagnets_width - 1) / 2) * electromagnet_radius * 2 + width_of_domain / 2,
+            i, j
+        ]
+        for i in range(num_electromagnets_length)
+        for j in range(num_electromagnets_width)
+    ])
 
-    def eval(self, values, x):
-        values[0] = 0.0  # Jx
-        values[1] = 0.0  # Jy
-        values[2] = 0.0  # Jz (default)
+    # Vectorized computation of Jz
+    Jz_vals = np.zeros(coords.shape[0])
+    for cx, cy, i, j in centers:
+        dx = coords[:, 0] - cx
+        dy = coords[:, 1] - cy
+        mask = dx**2 + dy**2 <= electromagnet_radius**2
+        polarity = 1 if (i + j) % 2 == 0 else -1
+        Jz_vals[mask] = polarity * current_magnitude
 
-        for cx, cy, i, j in self.centers:
-            dx = x[0] - cx
-            dy = x[1] - cy
-            r_squared = dx**2 + dy**2
-            if r_squared <= self.radius**2:
-                # Alternate polarity in a checkerboard pattern
-                polarity = 1 if (i + j) % 2 == 0 else -1
-                # Uniform current density
-                values[2] = polarity * self.current_magnitude
-                break
+    # Create the vector function for J
+    V_J = fe.VectorFunctionSpace(mesh, "CG", 1)
+    J = fe.Function(V_J)
+    J.vector().set_local(np.hstack([np.zeros_like(Jz_vals), np.zeros_like(Jz_vals), Jz_vals]))
+    J.vector().apply("insert")
 
-    def value_shape(self):
-        return (3,)
-
+    return J
 
 def define_weak_form(mesh, mu, J):
     """
@@ -44,27 +43,19 @@ def define_weak_form(mesh, mu, J):
     # Create a function space for the weak formulation
     nedelec_first_kind = fe.FunctionSpace(mesh, "Nedelec 1st kind H(curl)", 1)
 
-    # Trial and test functions
-    A = fe.TrialFunction(nedelec_first_kind)
-    v = fe.TestFunction(nedelec_first_kind)
-
     # Trial and Test Functions
     u_trial = fe.TrialFunction(nedelec_first_kind)
     v_test = fe.TestFunction(nedelec_first_kind)
 
-    # Magnetic field B = curl(A)
-    B = fe.curl(u_trial)
-
     # Weak formulation for the magnetic vector potential
-    # weak_form = (1 / mu) * fe.inner(fe.curl(u_trial), fe.curl(v_test)) * fe.dx - fe.inner(J, v_test) * fe.dx
     weak_form_lhs = (1 / mu) * fe.inner(fe.curl(u_trial), fe.curl(v_test)) * fe.dx
-    weak_form_rhs = fe.inner(J, v_test) * fe.dx
+    weak_form_rhs = fe.inner(J, v_test) * fe.dx  # Incorporate current density J as the source term
 
-    return nedelec_first_kind, weak_form_lhs, weak_form_rhs, v_test, u_trial
+    return nedelec_first_kind, weak_form_lhs, weak_form_rhs
 
-def compute_magnetic_force(mesh, u_trial, mu):
+def compute_magnetic_force(mesh, b_solution, mu):
     # Magnetic field B = curl(A)
-    B = fe.curl(u_trial)
+    B = fe.curl(b_solution)
 
     # Components of the Maxwell stress tensor
     Bx, By, Bz = B[0], B[1], B[2]
@@ -73,7 +64,7 @@ def compute_magnetic_force(mesh, u_trial, mu):
     T_zz = (1 / mu) * Bz**2 - (1 / (2 * mu)) * (Bx**2 + By**2 + Bz**2)
 
     # Magnetic force in the z-direction
-    f_z = -fe.div(fe.as_vector([T_xz, T_yz, T_zz]))
+    f_z = fe.div(fe.as_vector([T_xz, T_yz, T_zz]))
 
     # Project the force onto a function space for visualization
     V = fe.FunctionSpace(mesh, "CG", 1)

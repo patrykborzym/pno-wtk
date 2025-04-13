@@ -1,12 +1,11 @@
 import fenics as fe
-import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib as plt
 from geometry import create_mesh_and_subdomains
-from physics import CurrentDensity
 from physics import define_weak_form
 from physics import compute_magnetic_force
-
-N_POINTS_P_AXIS = 12
-FORCING_MAGNITUDE = 1.0
+from physics import generate_current_density
+from plot import plot_magnetic_potential, plot_magnetic_potential_magnitude  # Import the new function
 
 def main():
     # Define metal sheet parameters
@@ -15,7 +14,8 @@ def main():
     metal_sheet_width = 0.2
     metal_sheet_thickness = 0.0007
     effective_conductivity = 0.283  # 28.3% effective surface
-    mu_metal_sheet = 4 * fe.pi * 1e-7  # Metal sheet permeability (H/m)
+    mu_metal_sheet_real = 4 * fe.pi * 1e-7  # Metal sheet permeability (H/m)
+    mu_metal_sheet = mu_metal_sheet_real * effective_conductivity  # Adjusted for effective conductivity
 
     # General constants
     mu_air = 1.0  # Air permeability
@@ -24,15 +24,15 @@ def main():
     # Define electromagnet parameters
     num_electromagnets_length = 6
     num_electromagnets_width = 6
-    electromagnet_radius = 0.01  # 20 mm diameter
+    electromagnet_radius = 0.03  # 20 mm diameter
     electromagnet_height = 0.015  # 15 mm length
     mu_electromagnet = 4 * fe.pi * 1e-7  # Electromagnet permeability (H/m)
 
     # Define the mesh and function space
     length_of_domain = metal_sheet_length * 2
     width_of_domain = metal_sheet_width * 2
-    height_of_domain = [electromagnet_height / 2 + num_metal_sheets * (metal_sheet_thickness + distance_between_metal_sheets)
-                         + (metal_sheet_thickness + distance_between_metal_sheets) / 2 ] * 4 
+    height_of_domain = ( electromagnet_height / 2 + num_metal_sheets * (metal_sheet_thickness + distance_between_metal_sheets) \
+                       + (metal_sheet_thickness + distance_between_metal_sheets) / 2 ) * 4  # Corrected to scalar
 
     # Create mesh and subdomains
     mesh, mu = create_mesh_and_subdomains(length_of_domain, width_of_domain, height_of_domain, mu_air,
@@ -41,41 +41,38 @@ def main():
 
     # Calculate current magnitude based on parameters
     electromagnet_area = fe.pi * electromagnet_radius**2  # Cross-sectional area of an electromagnet
-    desired_magnetic_field = 1.0  # Desired magnetic field strength (T)
+    desired_magnetic_field = 1.0 * 10 ** (-8)  # Desired magnetic field strength (T)
     current_magnitude = desired_magnetic_field / (mu_electromagnet * electromagnet_area)
-    J = CurrentDensity(length_of_domain, width_of_domain, num_electromagnets_length,
-                    num_electromagnets_width, electromagnet_radius, current_magnitude, degree=1)
-    
-    nedelec_first_kind, weak_form_lhs, weak_form_rhs, v_test, u_trial = define_weak_form(mesh, mu, J)
-    
-    
+    J = generate_current_density(mesh, length_of_domain, width_of_domain,
+                             num_electromagnets_length, num_electromagnets_width,
+                             electromagnet_radius, current_magnitude)
+
+    # Define the weak formulation
+    nedelec_first_kind, weak_form_lhs, weak_form_rhs = define_weak_form(mesh, mu, J)
+
     # Boundary Conditions
     def boundary_boolean_function(x, on_boundary):
-        return on_boundary
+        return on_boundary  # Ensure this applies to all edges of the mesh
 
     homogeneous_dirichlet_boundary_condition = fe.DirichletBC(
         nedelec_first_kind,
-        fe.Constant(0.0),
+        fe.Constant((0.0, 0.0, 0.0)),  # Zero vector for homogeneous Dirichlet condition
         boundary_boolean_function,
     )
 
     # Finite Element Assembly and Linear System solve
     b_solution = fe.Function(nedelec_first_kind)
-    fe.solve(
-        weak_form_lhs == weak_form_rhs,
-        b_solution,
-        homogeneous_dirichlet_boundary_condition,
-    )
+    A, b = fe.assemble_system(weak_form_lhs, weak_form_rhs, homogeneous_dirichlet_boundary_condition)
+    fe.solve(A, b_solution.vector())
 
-    # Compute the magnetic force in the z-direction
-    f_z = compute_magnetic_force(mesh, b_solution, mu)
+    # Define z-values for plotting
+    z_values = np.linspace(0, height_of_domain, 5)
 
-    # Visualize
-    c = fe.plot(b_solution, mode="color")
-    plt.colorbar(c)
-    fe.plot(mesh)
+    # Plot the magnitude of the magnetic potential in the z-direction
+    plot_magnetic_potential_magnitude(b_solution, mesh, z_values)
 
-    plt.show()
+    # Plot the magnetic vector potential
+    plot_magnetic_potential(b_solution, mesh, z_values)
 
 if __name__ == "__main__":
     main()

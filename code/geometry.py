@@ -41,15 +41,15 @@ def create_mesh_and_subdomains(length, width, height, mu_electromagnet, mu_air, 
     # Define air regions
     class AirDomain(fe.SubDomain):
         def inside(self, x, on_boundary):
-            return True  # Default to air everywhere else
+            return electromagnet_domains[x] == 0  # Corrected to identify air regions
 
     air = AirDomain()
     air.mark(electromagnet_domains, 2)
 
     # Define magnetic permeability for each subdomain
     mu = fe.Function(fe.FunctionSpace(mesh, "DG", 0))
-    mu.vector()[:] = fe.interpolate(fe.Constant(mu_air), mu.function_space()).vector()
-    mu.vector()[electromagnet_domains.array() == 1] = mu_electromagnet
+    mu.assign(fe.Constant(mu_air))  # Initialize with air permeability
+    mu.vector()[electromagnet_domains.array() == 1] = mu_electromagnet  # Electromagnet regions
 
     # Define the current density J
     class CurrentDensity(fe.UserExpression):
