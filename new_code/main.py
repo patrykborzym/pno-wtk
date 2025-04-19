@@ -2,7 +2,7 @@ import fenics as fe
 import numpy as np
 import matplotlib as plt
 from physics import compute_magnetic_force
-from plot import plot_magnetic_potential, plot_magnetic_potential_magnitude  # Import the new function
+from plot import plot_magnetic_potential, plot_magnetic_potential_magnitude_force, plot_magnetic_potential_magnitude_potential
 from physics import calculate_solution
 
 def main():
@@ -20,9 +20,9 @@ def main():
     distance_between_metal_sheets = 0.0002
 
     # Define electromagnet parameters
-    num_electromagnets_length = 6
-    num_electromagnets_width = 6
-    electromagnet_radius = 0.03  # 20 mm diameter
+    num_electromagnets_length = 1
+    num_electromagnets_width = 1
+    electromagnet_radius = 0.2  # 20 mm diameter
     electromagnet_height = 0.015  # 15 mm length
     mu_electromagnet = 4 * fe.pi * 1e-7  # Electromagnet permeability (H/m)
 
@@ -46,7 +46,7 @@ def main():
     while retries < max_retries:
         try:
             # Perform all calculations and solve the system
-            mesh, nedelec_first_kind, b_solution, mu, domain = calculate_solution(
+            mesh, nedelec_first_kind, a_solution, mu, domain = calculate_solution(
                 resolution, length_of_domain, width_of_domain, height_of_domain, mu_air,
                 num_electromagnets_length, num_electromagnets_width, electromagnet_radius,
                 electromagnet_height, mu_electromagnet, num_metal_sheets, metal_sheet_length,
@@ -65,21 +65,20 @@ def main():
             else:
                 print("Maximum retries reached. Exiting.")
                 return
+    # Magnetic field B = curl(A)
+    b_solution = fe.curl(a_solution)
 
     # Compute the magnetic force in the z-direction
     f_z = compute_magnetic_force(mesh, b_solution, domain, mu_air, mu_electromagnet, mu_metal_sheet)
 
-    # Define z-values for plotting
-    z_values = np.linspace(0, height_of_domain, 5)
-
     # Plot the magnitude of the magnetic force in the z-direction
-    plot_magnetic_potential_magnitude(f_z, mesh, z_values)
+    plot_magnetic_potential_magnitude_force(f_z, mesh)
 
     # Plot the magnitude of the magnetic potential in the z-direction
-    plot_magnetic_potential_magnitude(b_solution, mesh, z_values)
+    plot_magnetic_potential_magnitude_potential(b_solution, mesh)
 
     # Plot the magnetic vector potential
-    plot_magnetic_potential(b_solution, mesh, z_values)
+    plot_magnetic_potential(b_solution, mesh)
 
 if __name__ == "__main__":
     main()
