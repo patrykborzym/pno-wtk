@@ -20,8 +20,8 @@ def main():
     distance_between_metal_sheets = 0.0002
 
     # Define electromagnet parameters
-    num_electromagnets_length = 1
-    num_electromagnets_width = 1
+    num_electromagnets_length = 3
+    num_electromagnets_width = 3
     electromagnet_radius = 0.2  # 20 mm diameter
     electromagnet_height = 0.015  # 15 mm length
     mu_electromagnet = 4 * fe.pi * 1e-7  # Electromagnet permeability (H/m)
@@ -68,6 +68,10 @@ def main():
     # Magnetic field B = curl(A)
     b_solution = fe.curl(a_solution)
 
+    # Extract the z-component of the magnetic field as a scalar field
+    V_scalar = fe.FunctionSpace(mesh, "CG", 1)
+    b_solution_z = fe.project(b_solution[2], V_scalar)
+
     # Compute the magnetic force in the z-direction
     f_z = compute_magnetic_force(mesh, b_solution, domain, mu_air, mu_electromagnet, mu_metal_sheet)
 
@@ -75,10 +79,10 @@ def main():
     plot_magnetic_potential_magnitude_force(f_z, mesh)
 
     # Plot the magnitude of the magnetic potential in the z-direction
-    plot_magnetic_potential_magnitude_potential(b_solution, mesh)
+    plot_magnetic_potential_magnitude_potential(b_solution_z, mesh)
 
-    # Plot the magnetic vector potential
-    plot_magnetic_potential(b_solution, mesh)
+    # Plot the magnetic vector potential (z-component)
+    plot_magnetic_potential(b_solution_z, mesh)
 
 if __name__ == "__main__":
     main()

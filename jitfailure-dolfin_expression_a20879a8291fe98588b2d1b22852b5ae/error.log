@@ -1,0 +1,66 @@
+In file included from /var/folders/78/7y7v3wdn3tl697t7jmmvrdfr0000gn/T/tmpesy406ja/dolfin_expression_a20879a8291fe98588b2d1b22852b5ae.cpp:13:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/dolfin/function/Expression.h:26:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Dense:1:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Core:170:
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/NumTraits.h:223:12: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+  223 |     return numext::numeric_limits<T>::infinity();
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/NEON/PacketMath.h:3282:63: note: in instantiation of member function 'Eigen::GenericNumTraits<float>::infinity' requested here
+ 3282 |   const Packet4f infinity = pset1<Packet4f>(NumTraits<float>::infinity());
+      |                                                               ^
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/NEON/PacketMath.h:3282:45: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+ 3282 |   const Packet4f infinity = pset1<Packet4f>(NumTraits<float>::infinity());
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/NEON/PacketMath.h:3292:45: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+ 3292 |   const Packet2f infinity = pset1<Packet2f>(NumTraits<float>::infinity());
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /var/folders/78/7y7v3wdn3tl697t7jmmvrdfr0000gn/T/tmpesy406ja/dolfin_expression_a20879a8291fe98588b2d1b22852b5ae.cpp:13:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/dolfin/function/Expression.h:26:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Dense:1:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Core:170:
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/NumTraits.h:223:12: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+  223 |     return numext::numeric_limits<T>::infinity();
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/NEON/PacketMath.h:3915:64: note: in instantiation of member function 'Eigen::GenericNumTraits<double>::infinity' requested here
+ 3915 |   const Packet2d infinity = pset1<Packet2d>(NumTraits<double>::infinity());
+      |                                                                ^
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/NEON/PacketMath.h:3915:45: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+ 3915 |   const Packet2d infinity = pset1<Packet2d>(NumTraits<double>::infinity());
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/var/folders/78/7y7v3wdn3tl697t7jmmvrdfr0000gn/T/tmpesy406ja/dolfin_expression_a20879a8291fe98588b2d1b22852b5ae.cpp:65:47: error: use of undeclared identifier 'subdomain'
+   65 |           values[0] = x[2] <= 0.5 * height ? (subdomain == 1 ? mu_electromagnet : (subdomain == 2 ? mu_metal_sheet : mu_air)) : mu_air;
+      |                                               ^
+/var/folders/78/7y7v3wdn3tl697t7jmmvrdfr0000gn/T/tmpesy406ja/dolfin_expression_a20879a8291fe98588b2d1b22852b5ae.cpp:65:84: error: use of undeclared identifier 'subdomain'
+   65 |           values[0] = x[2] <= 0.5 * height ? (subdomain == 1 ? mu_electromagnet : (subdomain == 2 ? mu_metal_sheet : mu_air)) : mu_air;
+      |                                                                                    ^
+In file included from /var/folders/78/7y7v3wdn3tl697t7jmmvrdfr0000gn/T/tmpesy406ja/dolfin_expression_a20879a8291fe98588b2d1b22852b5ae.cpp:13:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/dolfin/function/Expression.h:26:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Dense:1:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Core:250:
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/Default/GenericPacketMathFunctions.h:853:52: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+  853 |   const RealPacket cst_pos_inf = pset1<RealPacket>(NumTraits<RealScalar>::infinity());
+      |                                                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/NEON/Complex.h:382:10: note: in instantiation of function template specialization 'Eigen::internal::psqrt_complex<Eigen::internal::Packet1cf>' requested here
+  382 |   return psqrt_complex<Packet1cf>(a);
+      |          ^
+In file included from /var/folders/78/7y7v3wdn3tl697t7jmmvrdfr0000gn/T/tmpesy406ja/dolfin_expression_a20879a8291fe98588b2d1b22852b5ae.cpp:13:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/dolfin/function/Expression.h:26:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Dense:1:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Core:250:
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/Default/GenericPacketMathFunctions.h:853:52: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+  853 |   const RealPacket cst_pos_inf = pset1<RealPacket>(NumTraits<RealScalar>::infinity());
+      |                                                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/NEON/Complex.h:386:10: note: in instantiation of function template specialization 'Eigen::internal::psqrt_complex<Eigen::internal::Packet2cf>' requested here
+  386 |   return psqrt_complex<Packet2cf>(a);
+      |          ^
+In file included from /var/folders/78/7y7v3wdn3tl697t7jmmvrdfr0000gn/T/tmpesy406ja/dolfin_expression_a20879a8291fe98588b2d1b22852b5ae.cpp:13:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/dolfin/function/Expression.h:26:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Dense:1:
+In file included from /Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/Core:250:
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/Default/GenericPacketMathFunctions.h:853:52: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+  853 |   const RealPacket cst_pos_inf = pset1<RealPacket>(NumTraits<RealScalar>::infinity());
+      |                                                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/borzym/miniconda3/envs/fenicsproject/include/eigen3/Eigen/src/Core/arch/NEON/Complex.h:575:10: note: in instantiation of function template specialization 'Eigen::internal::psqrt_complex<Eigen::internal::Packet1cd>' requested here
+  575 |   return psqrt_complex<Packet1cd>(a);
+      |          ^
+8 warnings and 2 errors generated.

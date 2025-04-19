@@ -43,9 +43,9 @@ def generate_current_density(mesh, length_of_domain, width_of_domain,
     return J
 
 
-def define_weak_form(mesh, mu, J):
+def define_weak_form(mesh, domain, mu_air, mu_electromagnet, mu_metal_sheet, J):
     """
-    Define the weak formulation for the magnetic vector potential A.
+    Define the weak formulation for the magnetic vector potential A, using a fe.Function to handle mu as a spatially varying coefficient.
     """
     # Create a function space for the weak formulation
     nedelec_first_kind = fe.FunctionSpace(mesh, "Nedelec 1st kind H(curl)", 1)
@@ -53,6 +53,16 @@ def define_weak_form(mesh, mu, J):
     # Trial and Test Functions
     u_trial = fe.TrialFunction(nedelec_first_kind)
     v_test = fe.TestFunction(nedelec_first_kind)
+
+    # Define mu as a spatially varying coefficient using a fe.Function
+    mu = fe.Function(fe.FunctionSpace(mesh, "DG", 0))
+    mu_values = mu.vector().get_local()
+    domain_array = domain.array()
+    mu_values[domain_array == 0] = mu_air
+    mu_values[domain_array == 1] = mu_electromagnet
+    mu_values[domain_array == 2] = mu_metal_sheet
+    mu.vector().set_local(mu_values)
+    mu.vector().apply("insert")
 
     # Weak formulation for the magnetic vector potential
     weak_form_lhs = (1 / mu) * fe.inner(fe.curl(u_trial), fe.curl(v_test)) * fe.dx
@@ -75,8 +85,15 @@ def compute_magnetic_force(mesh, b_solution, domain, mu_air, mu_electromagnet, m
     mu_values.vector().set_local(mu_array)
     mu_values.vector().apply("insert")
 
+    # Compute the magnetic field B = curl(A)
+    B = fe.curl(b_solution)
+
+    # Ensure B is projected onto a continuous function space for accurate visualization
+    V_vector = fe.VectorFunctionSpace(mesh, "CG", 1)
+    B_projected = fe.project(B, V_vector)
+
     # Components of the Maxwell stress tensor
-    Bx, By, Bz = b_solution[0], b_solution[1], b_solution[2]
+    Bx, By, Bz = B_projected[0], B_projected[1], B_projected[2]
     T_xz = (1 / mu_values) * Bx * Bz
     T_yz = (1 / mu_values) * By * Bz
     T_zz = (1 / mu_values) * Bz**2 - (1 / (2 * mu_values)) * (Bx**2 + By**2 + Bz**2)
@@ -85,8 +102,8 @@ def compute_magnetic_force(mesh, b_solution, domain, mu_air, mu_electromagnet, m
     f_z = fe.div(fe.as_vector([T_xz, T_yz, T_zz]))
 
     # Project the force onto a function space for visualization
-    V = fe.FunctionSpace(mesh, "CG", 1)
-    f_z_projected = fe.project(f_z, V)
+    V_scalar = fe.FunctionSpace(mesh, "CG", 1)
+    f_z_projected = fe.project(f_z, V_scalar)
 
     return f_z_projected
 
@@ -113,7 +130,9 @@ def calculate_solution(resolution, length_of_domain, width_of_domain, height_of_
     )
 
     # Define the weak formulation
-    nedelec_first_kind, weak_form_lhs, weak_form_rhs = define_weak_form(mesh, mu, J)
+    nedelec_first_kind, weak_form_lhs, weak_form_rhs = define_weak_form(
+        mesh, domain, mu_air, mu_electromagnet, mu_metal_sheet, J
+    )
 
     # Define the homogeneous Dirichlet boundary condition
     def boundary_boolean_function(x, on_boundary):
@@ -129,6 +148,7 @@ def calculate_solution(resolution, length_of_domain, width_of_domain, height_of_
         boundary_boolean_function,
     )
 
+
     # Solve the system using a robust direct solver (MUMPS)
     a_solution = fe.Function(nedelec_first_kind)
     problem = fe.LinearVariationalProblem(
@@ -136,9 +156,14 @@ def calculate_solution(resolution, length_of_domain, width_of_domain, height_of_
     )
     solver = fe.LinearVariationalSolver(problem)
 
-    # Configure the solver to use MUMPS
-    solver.parameters["linear_solver"] = "mumps"
+    # Configure the solver for robustness and consistency
+    solver.parameters["linear_solver"] = "mumps"  # Use MUMPS direct solver
     solver.parameters["preconditioner"] = "none"  # No preconditioner needed for direct solvers
+    solver.parameters["krylov_solver"]["absolute_tolerance"] = 1e-12  # High precision
+    solver.parameters["krylov_solver"]["relative_tolerance"] = 1e-12  # High precision
+    solver.parameters["krylov_solver"]["maximum_iterations"] = 10000  # Ensure sufficient iterations
+    solver.parameters["krylov_solver"]["monitor_convergence"] = True  # Monitor convergence
+
     solver.solve()
 
     return mesh, nedelec_first_kind, a_solution, mu, domain

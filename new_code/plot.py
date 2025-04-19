@@ -2,7 +2,14 @@ import fenics as fe
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_magnetic_potential(b_solution, mesh):
+def plot_magnetic_potential(b_solution_z, mesh):
+    """
+    Plot the heat map of the z-component of the magnetic potential in the x-y plane for the last 5 z-values under half of the domain.
+
+    Parameters:
+        b_solution_z (Function): Z-component of the magnetic vector potential (scalar field).
+        mesh (Mesh): The computational mesh.
+    """
     coordinates = mesh.coordinates()
     z_coords = np.unique(coordinates[:, 2])
 
@@ -22,7 +29,7 @@ def plot_magnetic_potential(b_solution, mesh):
     for z in z_values:
         # Evaluate the z-component of the magnetic potential at the given z-plane
         points = np.array([fe.Point(xi, yi, z) for xi, yi in zip(X.flatten(), Y.flatten())])
-        b_plane = np.array([b_solution(p)[2] for p in points]).reshape(X.shape)
+        b_plane = np.array([b_solution_z(fe.Point(p[0], p[1], z)) for p in points]).reshape(X.shape)
 
         # Create a 2D heat map using Matplotlib
         plt.figure(figsize=(8, 6))
@@ -67,27 +74,34 @@ def plot_magnetic_potential_magnitude_force(f_z, mesh):
     plt.grid()
     plt.show()
 
-def plot_magnetic_potential_magnitude_potential(b_solution, mesh):
- # Extract unique z-values from the mesh
+def plot_magnetic_potential_magnitude_potential(b_solution_z, mesh):
+    """
+    Calculate and plot the total magnetic potential (z-component) for all z-values in the mesh.
+
+    Parameters:
+        b_solution_z (Function): Z-component of the magnetic vector potential (scalar field).
+        mesh (Mesh): The computational mesh.
+    """
+    # Extract unique z-values from the mesh
     coordinates = mesh.coordinates()
     z_values = np.unique(coordinates[:, 2])
 
-    # Compute the total sum of the magnetic potential for each z-value
+    # Compute the total sum of the z-component of the magnetic potential for each z-value
     z_totals = []
     for z in z_values:
         # Get all points in the mesh at the given z-plane
         points = coordinates[np.abs(coordinates[:, 2] - z) < 1e-6]
         if len(points) > 0:
-            # Sum the magnetic potential values at these points
-            potential_sum = sum(b_solution(fe.Point(p[0], p[1], z)) for p in points)
+            # Sum the z-component of the magnetic potential values at these points
+            potential_sum = sum(b_solution_z(fe.Point(p[0], p[1], z)) for p in points)
             z_totals.append(potential_sum)
         else:
             z_totals.append(0.0)
 
-    # Plot the total magnetic potential as a function of z
+    # Plot the total magnetic potential (z-component) as a function of z
     plt.figure(figsize=(8, 6))
     plt.plot(z_values, z_totals, marker="o", linestyle="-", color="blue")
-    plt.title("Total Magnetic Potential in z-direction")
+    plt.title("Total Magnetic Potential (z-component) in z-direction")
     plt.xlabel("z (m)")
     plt.ylabel("Total Magnetic Potential (A/m)")
     plt.grid()

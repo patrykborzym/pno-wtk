@@ -4,7 +4,6 @@ def create_mesh_and_subdomains(length_of_domain, width_of_domain, height_of_doma
                                num_electromagnets_length, num_electromagnets_width, electromagnet_radius, electromagnet_height, mu_electromagnet, 
                                num_metal_sheets, metal_sheet_length, metal_sheet_width, metal_sheet_thickness, mu_metal_sheet, distance_between_metal_sheets,
                                resolution):
-    
     # Create a mesh with the specified resolution
     mesh = fe.BoxMesh(fe.Point(0, 0, 0), fe.Point(length_of_domain, width_of_domain, height_of_domain), resolution, resolution, resolution)
 
