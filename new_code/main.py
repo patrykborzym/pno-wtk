@@ -4,6 +4,7 @@ import matplotlib as plt
 from physics import compute_magnetic_force
 from plot import plot_magnetic_potential, plot_magnetic_potential_magnitude_force, plot_magnetic_potential_magnitude_potential
 from physics import calculate_solution
+import math
 
 def main():
     # Define metal sheet parameters
@@ -22,9 +23,9 @@ def main():
     g = 9.81  # Gravitational acceleration (m/s^2)
 
     # Define electromagnet parameters
-    num_electromagnets_length = 1
-    num_electromagnets_width = 1
-    electromagnet_radius = 0.2  # 20 mm diameter
+    num_electromagnets_length = 3
+    num_electromagnets_width = 3
+    electromagnet_radius = 0.05  # 20 mm diameter
     electromagnet_height = 0.015  # 15 mm length
     mu_electromagnet = 4 * fe.pi * 1e-7  # Electromagnet permeability (H/m)
 
@@ -50,10 +51,10 @@ def main():
         current_magnitude = desired_magnetic_field / (mu_electromagnet * electromagnet_area)
 
         # Initial resolution
-        resolution = 20
+        resolution = 30  # Start with a lower resolution to avoid memory issues
 
         # Attempt to solve the system, retrying with reduced mesh resolution if necessary
-        max_retries = 10
+        max_retries = 5  # Reduce the number of retries to avoid excessive memory usage
         retries = 0
         while retries < max_retries:
             try:
@@ -72,7 +73,7 @@ def main():
                 retries += 1
                 if retries < max_retries:
                     print("Retrying with reduced mesh resolution...")
-                    resolution = max(10, resolution - 10)  # Reduce resolution by 10 each retry
+                    resolution = max(10, resolution - 5)  # Reduce resolution by 5 each retry
                     print(f"New resolution: {resolution}")
                 else:
                     print("Maximum retries reached. Exiting.")
@@ -82,19 +83,19 @@ def main():
         b_solution = fe.curl(a_solution)
 
         # Compute the magnetic force in the z-direction
-        f_z = compute_magnetic_force(mesh, b_solution, domain, mu_air, mu_electromagnet, mu_metal_sheet)
+        f_z = compute_magnetic_force(mesh, b_solution, domain, mu)
 
         # Integrate the magnetic force over the first metal sheet
         try:
-            dx_metal_sheet = fe.Measure("dx", domain=domain)
+            dx_metal_sheet = fe.Measure("dx", subdomain_data=domain, domain=mesh)  # Associate domain with the mesh
             magnetic_force = fe.assemble(f_z * dx_metal_sheet(2))  # Subdomain ID 2 corresponds to the first metal sheet
         except RuntimeError as e:
             print(f"Error during magnetic force computation: {e}")
             magnetic_force = 0.0
 
         # Check for convergence
-        if magnetic_force == 0.0:
-            print("Magnetic force is zero. Adjusting the magnetic field to avoid division by zero.")
+        if magnetic_force == 0.0 or math.isnan(magnetic_force):
+            print("Magnetic force is zero or invalid. Adjusting the magnetic field to avoid division by zero.")
             desired_magnetic_field *= 1.1  # Increase the magnetic field slightly to avoid zero division
             iteration += 1
             continue
@@ -104,7 +105,17 @@ def main():
             break
 
         # Update the guess for the magnetic field
-        desired_magnetic_field *= gravitational_force / magnetic_force
+        try:
+            desired_magnetic_field *= gravitational_force / max(magnetic_force, 1e-12)  # Avoid division by zero
+        except ZeroDivisionError:
+            print("Division by zero encountered. Resetting magnetic field to initial guess.")
+            desired_magnetic_field = 1e-8  # Reset to initial guess
+
+        # Check for NaN in desired_magnetic_field
+        if math.isnan(desired_magnetic_field):
+            print("Desired magnetic field became NaN. Resetting to initial guess.")
+            desired_magnetic_field = 1e-8  # Reset to initial guess
+
         iteration += 1
         print(f"Iteration {iteration}: Updated magnetic field = {desired_magnetic_field} T")
 

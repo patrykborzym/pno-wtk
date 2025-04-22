@@ -1,6 +1,8 @@
 import fenics as fe
 import matplotlib.pyplot as plt
 import numpy as np
+import pyvista as pv
+import meshio
 
 def plot_magnetic_potential(b_solution_z, mesh):
     """
@@ -106,3 +108,93 @@ def plot_magnetic_potential_magnitude_potential(b_solution_z, mesh):
     plt.ylabel("Total Magnetic Potential (A/m)")
     plt.grid()
     plt.show()
+
+
+def mu_values_visualisation(mesh, subdomains, mu):
+    
+    with fe.XDMFFile(mesh.mpi_comm(), "mesh.xdmf") as f:
+        f.write(mesh)
+    with fe.XDMFFile(mesh.mpi_comm(), "subdomains.xdmf") as f:
+        f.write(subdomains)
+    with fe.XDMFFile(mesh.mpi_comm(), "mu.xdmf") as f:
+        f.write(mu)
+
+    meshio_mesh = meshio.read("mesh.xdmf")
+    meshio.write("mesh.vtk", meshio_mesh)
+    pv_mesh = pv.read("mesh.vtk")
+
+    pv_mesh.cell_data["Subdomains"] = subdomains.array().astype(float)
+    mu_vals = mu.vector().get_local()
+    if len(mu_vals) == pv_mesh.n_cells:
+        pv_mesh.cell_data["Magnetic Permeability"] = mu_vals
+    else:
+        interp_vals = np.zeros(pv_mesh.n_cells)
+        for i, cell in enumerate(pv_mesh.cell_centers().points):
+            interp_vals[i] = mu(fe.Point(*cell))
+        pv_mesh.cell_data["Magnetic Permeability"] = interp_vals
+
+    plotter = pv.Plotter()
+    plotter.add_mesh(pv_mesh, scalars="Subdomains", cmap="viridis", opacity=0.5, show_edges=True)
+    plotter.add_scalar_bar(title="Subdomains")
+    plotter.show()
+
+    plotter = pv.Plotter()
+    plotter.add_mesh(pv_mesh, scalars="Magnetic Permeability", cmap="plasma", opacity=0.5, show_edges=True)
+    plotter.add_scalar_bar(title="Magnetic Permeability")
+    plotter.show()
+
+
+def plot_2d_domain_markings_and_mu(mesh, subdomains, mu):
+    """
+    Plot 2D heat maps of the domain markings and mu values in the x-y plane for the last 5 z-values under half of the domain.
+
+    Parameters:
+        mesh (Mesh): The computational mesh.
+        subdomains (MeshFunction): Subdomain markings.
+        mu (Function): Magnetic permeability values.
+    """
+    coordinates = mesh.coordinates()
+    z_coords = np.unique(coordinates[:, 2])
+
+    # Filter z-values to include only those under half of the domain
+    z_half = z_coords[z_coords <= z_coords.max() / 2]
+
+    # Take the last 5 z-values
+    z_values = z_half
+
+    x_min, x_max = coordinates[:, 0].min(), coordinates[:, 0].max()
+    y_min, y_max = coordinates[:, 1].min(), coordinates[:, 1].max()
+
+    x = np.linspace(x_min, x_max, 100)
+    y = np.linspace(y_min, y_max, 100)
+    X, Y = np.meshgrid(x, y)
+
+    for z in z_values:
+        # Evaluate subdomain markings at the given z-plane
+        points = np.array([fe.Point(xi, yi, z) for xi, yi in zip(X.flatten(), Y.flatten())])
+        markings_plane = np.zeros(X.shape)
+        for i, p in enumerate(points):
+            cell = fe.Cell(mesh, mesh.bounding_box_tree().compute_first_entity_collision(p))
+            if cell.contains(p):
+                markings_plane.flat[i] = subdomains[cell.index()]
+            else:
+                markings_plane.flat[i] = 0  # Default to air if no cell contains the point
+
+        plt.figure(figsize=(8, 6))
+        contour = plt.contourf(X, Y, markings_plane, levels=np.arange(0, 3), cmap="viridis")
+        plt.colorbar(contour, label="Domain Markings")
+        plt.title(f"Domain Markings at z = {z:.3f} m")
+        plt.xlabel("x (m)")
+        plt.ylabel("y (m)")
+        plt.show()
+
+        # Evaluate mu values at the given z-plane
+        mu_plane = np.array([mu(p) for p in points]).reshape(X.shape)
+
+        plt.figure(figsize=(8, 6))
+        contour = plt.contourf(X, Y, mu_plane, levels=50, cmap="plasma")
+        plt.colorbar(contour, label="Magnetic Permeability (H/m)")
+        plt.title(f"Magnetic Permeability at z = {z:.3f} m")
+        plt.xlabel("x (m)")
+        plt.ylabel("y (m)")
+        plt.show()

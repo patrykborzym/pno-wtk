@@ -8,9 +8,9 @@ def generate_current_density(mesh, length_of_domain, width_of_domain,
     """
     Generate the current density J, considering the position of the electromagnets in the mesh.
     """
-    # Scalar space (used to create component functions)
-    V_scalar = fe.FunctionSpace(mesh, 'CG', 1)
-    coords = V_scalar.tabulate_dof_coordinates().reshape((-1, 3))
+    # Use cell-based operations to define the current density
+    V_scalar = fe.FunctionSpace(mesh, 'DG', 0)  # Use DG space for cell-based operations
+    Jz = fe.Function(V_scalar)
 
     # Compute all magnet centers
     z_center = height_of_domain / 2  # Center height of the electromagnets
@@ -24,28 +24,57 @@ def generate_current_density(mesh, length_of_domain, width_of_domain,
         for j in range(num_electromagnets_width)
     ])
 
-    # Vectorized computation of Jz
-    Jz_vals = np.zeros(coords.shape[0])
-    for cx, cy, cz in centers:
-        dx = coords[:, 0] - cx
-        dy = coords[:, 1] - cy
-        dz = coords[:, 2] - cz
-        mask = (dx**2 + dy**2 <= electromagnet_radius**2) & (abs(dz) <= electromagnet_height / 2)
-        polarity = 1 if (cx + cy) % 2 == 0 else -1
-        Jz_vals[mask] = polarity * current_magnitude
+    # Assign current density values cell by cell
+    Jz_values = Jz.vector().get_local()
+    for cell in fe.cells(mesh):
+        cell_midpoint = cell.midpoint()
+        for cx, cy, cz in centers:
+            dx = cell_midpoint.x() - cx
+            dy = cell_midpoint.y() - cy
+            dz = cell_midpoint.z() - cz
+            if dx**2 + dy**2 <= electromagnet_radius**2 and abs(dz) <= electromagnet_height / 2:
+                polarity = 1 if (cx + cy) % 2 == 0 else -1
+                Jz_values[cell.index()] = polarity * current_magnitude
+
+    Jz.vector().set_local(Jz_values)
+    Jz.vector().apply("insert")
 
     # Create the vector function for J
     V_J = fe.VectorFunctionSpace(mesh, "CG", 1)
     J = fe.Function(V_J)
-    J.vector().set_local(np.hstack([np.zeros_like(Jz_vals), np.zeros_like(Jz_vals), Jz_vals]))
-    J.vector().apply("insert")
+
+    # Assign the z-component of the current density to the vector field
+    Jz_projected = fe.project(Jz, fe.FunctionSpace(mesh, "CG", 1))  # Project Jz into CG space
+    J.assign(fe.project(fe.as_vector([fe.Constant(0), fe.Constant(0), Jz_projected]), V_J))  # Use fe.project instead of fe.interpolate
 
     return J
 
-
-def define_weak_form(mesh, domain, mu_air, mu_electromagnet, mu_metal_sheet, J):
+class MuExpression(fe.UserExpression):
     """
-    Define the weak formulation for the magnetic vector potential A, using a fe.Function to handle mu as a spatially varying coefficient.
+    Define a spatially varying magnetic permeability (mu) as a UserExpression.
+    """
+    def __init__(self, domain, mu_air, mu_electromagnet, mu_metal_sheet, **kwargs):
+        super().__init__(**kwargs)
+        self.domain = domain
+        self.mu_air = mu_air
+        self.mu_electromagnet = mu_electromagnet
+        self.mu_metal_sheet = mu_metal_sheet
+
+    def eval_cell(self, values, x, cell):
+        subdomain_id = self.domain[cell.index]
+        if subdomain_id == 0:  # Air
+            values[0] = self.mu_air
+        elif subdomain_id == 1:  # Electromagnet
+            values[0] = self.mu_electromagnet
+        else:  # Metal sheets
+            values[0] = self.mu_metal_sheet
+
+    def value_shape(self):
+        return ()
+
+def define_weak_form(mesh, domain, mu, J):
+    """
+    Define the weak formulation for the magnetic vector potential A, using a simpler approach for mu.
     """
     # Create a function space for the weak formulation
     nedelec_first_kind = fe.FunctionSpace(mesh, "Nedelec 1st kind H(curl)", 1)
@@ -54,58 +83,38 @@ def define_weak_form(mesh, domain, mu_air, mu_electromagnet, mu_metal_sheet, J):
     u_trial = fe.TrialFunction(nedelec_first_kind)
     v_test = fe.TestFunction(nedelec_first_kind)
 
-    # Define mu as a spatially varying coefficient using a fe.Function
-    mu = fe.Function(fe.FunctionSpace(mesh, "DG", 0))
-    mu_values = mu.vector().get_local()
-    domain_array = domain.array()
-    mu_values[domain_array == 0] = mu_air
-    mu_values[domain_array == 1] = mu_electromagnet
-    mu_values[domain_array == 2] = mu_metal_sheet
-    mu.vector().set_local(mu_values)
-    mu.vector().apply("insert")
-
     # Weak formulation for the magnetic vector potential
     weak_form_lhs = (1 / mu) * fe.inner(fe.curl(u_trial), fe.curl(v_test)) * fe.dx
     weak_form_rhs = fe.inner(J, v_test) * fe.dx  # Incorporate current density J as the source term
 
     return nedelec_first_kind, weak_form_lhs, weak_form_rhs
 
-def compute_magnetic_force(mesh, b_solution, domain, mu_air, mu_electromagnet, mu_metal_sheet):
+def compute_magnetic_force(mesh, b_solution, domain, mu):
     """
-    Compute the magnetic force in the z-direction, considering different mu values for each material.
+    Compute the magnetic force in the z-direction using the Maxwell stress tensor and integrating over the surface of the metal sheet.
     """
-
-    # Define a piecewise function for mu based on the domain
-    mu_values = fe.Function(fe.FunctionSpace(mesh, "DG", 0))
-    mu_array = mu_values.vector().get_local()
-    domain_array = domain.array()
-    mu_array[domain_array == 0] = mu_air
-    mu_array[domain_array == 1] = mu_electromagnet
-    mu_array[domain_array == 2] = mu_metal_sheet
-    mu_values.vector().set_local(mu_array)
-    mu_values.vector().apply("insert")
+    # Interpolate mu into a CG space for safe computations
+    V1 = fe.FunctionSpace(mesh, "CG", 1)
+    mu_interp = fe.interpolate(mu, V1)
 
     # Compute the magnetic field B = curl(A)
     B = fe.curl(b_solution)
 
-    # Ensure B is projected onto a continuous function space for accurate visualization
-    V_vector = fe.VectorFunctionSpace(mesh, "CG", 1)
-    B_projected = fe.project(B, V_vector)
+    # Compute the Maxwell stress tensor components
+    T = fe.as_tensor(
+        [
+            [(1 / mu_interp) * (B[i] * B[j] - (1 if i == j else 0) * 0.5 * fe.inner(B, B)) for j in range(3)]
+            for i in range(3)
+        ]
+    )
 
-    # Components of the Maxwell stress tensor
-    Bx, By, Bz = B_projected[0], B_projected[1], B_projected[2]
-    T_xz = (1 / mu_values) * Bx * Bz
-    T_yz = (1 / mu_values) * By * Bz
-    T_zz = (1 / mu_values) * Bz**2 - (1 / (2 * mu_values)) * (Bx**2 + By**2 + Bz**2)
+    # Define the surface normal vector
+    n = fe.FacetNormal(mesh)
 
-    # Magnetic force in the z-direction
-    f_z = fe.div(fe.as_vector([T_xz, T_yz, T_zz]))
+    # Compute the magnetic force as the surface integral of the Maxwell stress tensor
+    force_z = fe.assemble(fe.dot(T * n, fe.as_vector([0, 0, 1])) * fe.ds(subdomain_data=domain, subdomain_id=2))
 
-    # Project the force onto a function space for visualization
-    V_scalar = fe.FunctionSpace(mesh, "CG", 1)
-    f_z_projected = fe.project(f_z, V_scalar)
-
-    return f_z_projected
+    return force_z
 
 def calculate_solution(resolution, length_of_domain, width_of_domain, height_of_domain, mu_air,
                        num_electromagnets_length, num_electromagnets_width, electromagnet_radius,
@@ -131,7 +140,7 @@ def calculate_solution(resolution, length_of_domain, width_of_domain, height_of_
 
     # Define the weak formulation
     nedelec_first_kind, weak_form_lhs, weak_form_rhs = define_weak_form(
-        mesh, domain, mu_air, mu_electromagnet, mu_metal_sheet, J
+        mesh, domain, mu, J
     )
 
     # Define the homogeneous Dirichlet boundary condition
