@@ -148,21 +148,21 @@ def calculate_solution(resolution, length_of_domain, width_of_domain, height_of_
         boundary_boolean_function,
     )
 
-
-    # Solve the system using a robust direct solver (MUMPS)
+    # Solve the system using the MUMPS direct solver
     a_solution = fe.Function(nedelec_first_kind)
     problem = fe.LinearVariationalProblem(
         weak_form_lhs, weak_form_rhs, a_solution, homogeneous_dirichlet_boundary_condition
     )
     solver = fe.LinearVariationalSolver(problem)
 
-    # Configure the solver for robustness and consistency
+    # Configure the solver for maximum robustness
     solver.parameters["linear_solver"] = "mumps"  # Use MUMPS direct solver
     solver.parameters["preconditioner"] = "none"  # No preconditioner needed for direct solvers
-    solver.parameters["krylov_solver"]["absolute_tolerance"] = 1e-12  # High precision
-    solver.parameters["krylov_solver"]["relative_tolerance"] = 1e-12  # High precision
+    solver.parameters["krylov_solver"]["absolute_tolerance"] = 1e-14  # High precision
+    solver.parameters["krylov_solver"]["relative_tolerance"] = 1e-14  # High precision
     solver.parameters["krylov_solver"]["maximum_iterations"] = 10000  # Ensure sufficient iterations
     solver.parameters["krylov_solver"]["monitor_convergence"] = True  # Monitor convergence
+    solver.parameters["krylov_solver"]["nonzero_initial_guess"] = False  # Start with zero initial guess
 
     solver.solve()
 

@@ -39,14 +39,14 @@ def create_mesh_and_subdomains(length_of_domain, width_of_domain, height_of_doma
                 (width_of_domain - metal_sheet_width) / 2 <= x[1] <= (width_of_domain + metal_sheet_width) / 2 and
                 metal_sheet_position_center - metal_sheet_thickness / 2 <= x[2] <= metal_sheet_position_center + metal_sheet_thickness / 2
             ):
-                domain[cell] = 2
+                domain[cell] = i + 2  # Assign unique subdomain IDs starting from 2 for each metal sheet
 
     # Define magnetic permeability for each subdomain
     mu = fe.Function(fe.FunctionSpace(mesh, "DG", 0))
     mu_values = mu.vector().get_local()
     domain_array = domain.array()
     mu_values[domain_array == 1] = mu_electromagnet
-    mu_values[domain_array == 2] = mu_metal_sheet
+    mu_values[domain_array >= 2] = mu_metal_sheet  # Update to handle multiple metal sheets
     mu_values[domain_array == 0] = mu_air
     mu.vector().set_local(mu_values)
     mu.vector().apply("insert")
