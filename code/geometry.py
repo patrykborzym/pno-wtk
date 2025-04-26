@@ -1,75 +1,96 @@
 import fenics as fe
+from plot import plot_2d_domain_markings_and_mu, mu_values_visualisation
 
-def create_mesh_and_subdomains(length, width, height, mu_electromagnet, mu_air, current_magnitude,
-                                effective_conductivity, metal_sheet_thickness, metal_sheet_positions,
-                                num_electromagnets, electromagnet_radius, electromagnet_height):
-    """
-    Create the computational mesh, define subdomains for electromagnets and air,
-    and set up physical parameters.
+# Unified subdomain marker
+class MaterialSubdomain(fe.SubDomain):
+    def __init__(self, electromagnet_centers, electromagnet_radius, electromagnet_height,
+                 metal_sheet_params, domain_height, length_of_domain, width_of_domain):
+        super().__init__()
+        self.e_centers = electromagnet_centers
+        self.e_radius = electromagnet_radius
+        self.e_height = electromagnet_height
+        self.domain_height = domain_height
+        self.length_of_domain = length_of_domain
+        self.width_of_domain = width_of_domain
+        self.metal_sheet_params = metal_sheet_params  # tuple of (num, length, width, thickness, distance)
 
-    Returns:
-        tuple: (mesh, mu, J, V)
-    """
-    # Define the computational domain and mesh
-    mesh = fe.BoxMesh(fe.Point(0, 0, 0), fe.Point(length, width, height), 20, 20, 20)
+    def inside(self, x, on_boundary):
+        # Electromagnets (marker 1)
+        for cx, cy in self.e_centers:
+            if (x[0]-cx)**2 + (x[1]-cy)**2 <= self.e_radius**2 and \
+               abs(x[2] - self.domain_height / 2) <= self.e_height / 2:
+                return 1
 
-    # Define subdomains for electromagnets
-    electromagnet_domains = fe.MeshFunction("size_t", mesh, 3, 0)
+        # Metal Sheets (markers 2, 3, 4, ...)
+        num_sheets, m_length, m_width, m_thick, m_dist = self.metal_sheet_params
+        for i in range(num_sheets):
+            z_center = (self.domain_height - self.e_height) / 2 - \
+                       (m_dist + m_thick)/2 - i * (m_dist + m_thick)
+            if ((self.length_of_domain - m_length) / 2 <= x[0] <= (self.length_of_domain + m_length) / 2) and \
+               ((self.width_of_domain - m_width) / 2 <= x[1] <= (self.width_of_domain + m_width) / 2) and \
+               (z_center - m_thick/2 <= x[2] <= z_center + m_thick/2):
+                return 2 + i  # Assign unique marker for each sheet
 
-    class ElectromagnetDomain(fe.SubDomain):
-        def __init__(self, center_x, center_y, radius, height, z_center):
-            super().__init__()
-            self.center_x = center_x
-            self.center_y = center_y
-            self.radius = radius
-            self.height = height
-            self.z_center = z_center
+        return 0
 
-        def inside(self, x, on_boundary):
-            r = ((x[0] - self.center_x)**2 + (x[1] - self.center_y)**2)**0.5
-            return r <= self.radius and abs(x[2] - self.z_center) <= self.height / 2
+def create_mesh_and_subdomains(length, width, height, mu_air,
+                               num_em_len, num_em_wid, em_radius, em_height, mu_em,
+                               num_sheets, sheet_length, sheet_width, sheet_thickness, mu_sheet,
+                               sheet_spacing, resolution):
 
-    # Create a 6x6 grid of electromagnets
-    z_center = height / 2
-    for i in range(num_electromagnets):
-        for j in range(num_electromagnets):
-            center_x = (i - (num_electromagnets - 1) / 2) * electromagnet_radius * 2 + length / 2
-            center_y = (j - (num_electromagnets - 1) / 2) * electromagnet_radius * 2 + width / 2
-            electromagnet = ElectromagnetDomain(center_x, center_y, electromagnet_radius, electromagnet_height, z_center)
-            electromagnet.mark(electromagnet_domains, 1)
+    mesh = fe.BoxMesh(fe.Point(0, 0, 0), fe.Point(length, width, height), resolution, resolution, resolution)
 
-    # Define air regions
-    class AirDomain(fe.SubDomain):
-        def inside(self, x, on_boundary):
-            return electromagnet_domains[x] == 0  # Corrected to identify air regions
+    subdomains = fe.MeshFunction("size_t", mesh, mesh.topology().dim())
+    subdomains.set_all(0)
 
-    air = AirDomain()
-    air.mark(electromagnet_domains, 2)
+    # Electromagnet centers
+    e_centers = [
+        ((i - (num_em_len - 1)/2) * em_radius * 2 + length / 2,
+         (j - (num_em_wid - 1)/2) * em_radius * 2 + width / 2)
+        for i in range(num_em_len)
+        for j in range(num_em_wid)
+    ]
 
-    # Define magnetic permeability for each subdomain
-    mu = fe.Function(fe.FunctionSpace(mesh, "DG", 0))
-    mu.assign(fe.Constant(mu_air))  # Initialize with air permeability
-    mu.vector()[electromagnet_domains.array() == 1] = mu_electromagnet  # Electromagnet regions
+    subdomain_marker = MaterialSubdomain(
+        e_centers, em_radius, em_height,
+        (num_sheets, sheet_length, sheet_width, sheet_thickness, sheet_spacing),
+        height, length, width
+    )
 
-    # Define the current density J
-    class CurrentDensity(fe.UserExpression):
-        def eval(self, values, x):
-            electromagnet_spacing = length / num_electromagnets
-            i = int(x[0] // electromagnet_spacing)
-            j = int(x[1] // electromagnet_spacing)
-            if 0 <= i < num_electromagnets and 0 <= j < num_electromagnets:
-                polarity = 1 if (i + j) % 2 == 0 else -1
-                values[0] = 0.0  # Jx
-                values[1] = 0.0  # Jy
-                values[2] = polarity * current_magnitude  # Jz
-            else:
-                values[0] = values[1] = values[2] = 0.0
+    for cell in fe.cells(mesh):
+        midpoint = cell.midpoint()
+        marker = subdomain_marker.inside(midpoint, False)
+        subdomains[cell] = marker
+
+    class MuExpression(fe.UserExpression):
+        """
+        Define a spatially varying magnetic permeability (mu) as a UserExpression.
+        """
+        def __init__(self, subdomains, mu_air, mu_em, mu_sheet, **kwargs):
+            super().__init__(**kwargs)
+            self.subdomains = subdomains
+            self.mu_air = mu_air
+            self.mu_em = mu_em
+            self.mu_sheet = mu_sheet
+
+        def eval_cell(self, values, x, cell):
+            marker = self.subdomains[cell.index]
+            if marker == 1:  # Electromagnet
+                values[0] = self.mu_em
+            elif marker >= 2:  # Metal sheets (markings 2, 3, 4, ...)
+                values[0] = self.mu_sheet
+            else:  # Air
+                values[0] = self.mu_air
+
         def value_shape(self):
-            return (3,)
+            return ()
 
-    J = CurrentDensity(degree=1)
+    mu_expr = MuExpression(subdomains, mu_air, mu_em, mu_sheet, degree=0)
+    V0 = fe.FunctionSpace(mesh, "DG", 0)
+    mu = fe.project(mu_expr, V0)
 
-    # Create a function space for the weak formulation
-    V = fe.FunctionSpace(mesh, "Nedelec 1st kind H(curl)", 1)
+    # Call the 2D plotting function
+    #mu_values_visualisation(mesh, subdomains, mu)
+    #plot_2d_domain_markings_and_mu(mesh, subdomains, mu)
 
-    return mesh, mu, J, V
+    return mesh, mu, subdomains
